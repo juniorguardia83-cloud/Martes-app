@@ -1,4 +1,4 @@
-name: Build APK
+ame: Build APK
 
 on:
   push:
@@ -22,11 +22,21 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install dependencies
+      - name: Install build dependencies
         run: |
           sudo apt update
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses-dev libncursesw5-dev libtinfo-dev cmake libffi-dev libssl-dev
           pip install --upgrade Cython==0.29.33 buildozer
+- name: Install Android SDK and accept licenses
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+          unzip -q tools.zip
+          mv cmdline-tools latest
+          rm tools.zip
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$HOME/android-sdk > /dev/null
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;28.2.13676358"
 
       - name: Build APK
         run: buildozer -v android debug
