@@ -28,10 +28,11 @@ jobs:
           sudo apt install -y git zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses-dev libncursesw5-dev libtinfo-dev cmake libffi-dev libssl-dev
           pip install --upgrade Cython==0.29.33 buildozer
 
-      - name: Accept Android SDK licenses
+      - name: Pre-accept Android SDK licenses
         run: |
           mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-          yes | buildozer android debug 2>/dev/null || true
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
 
       - name: Build APK
         run: buildozer -v android debug
