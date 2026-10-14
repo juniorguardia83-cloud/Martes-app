@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,8 +26,10 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip autoconf automake libtool libtool-bin \
-            m4 pkg-config zlib1g-dev libncurses-dev libtinfo-dev cmake libffi-dev libssl-dev
+          sudo apt-get install -y git zip unzip autoconf automake autoconf-archive \
+            libtool libtool-bin libltdl-dev m4 pkg-config zlib1g-dev \
+            libncurses-dev libtinfo-dev cmake libffi-dev libssl-dev
+          echo "ACLOCAL_PATH=/usr/share/aclocal" >> "$GITHUB_ENV"
           python -m pip install --upgrade pip
           python -m pip install "Cython<3" buildozer
 
