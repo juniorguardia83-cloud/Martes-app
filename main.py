@@ -72,37 +72,50 @@ def ajustar_texto(etiqueta):
 # Widgets propios
 # ---------------------------------------------------------------------------
 
+def textura_brillo(color, lado=64):
+    """Círculo de luz con borde que se desvanece suavemente."""
+    textura = Texture.create(size=(lado, lado), colorfmt="rgba")
+    rojo, verde, azul = (int(c * 255) for c in color[:3])
+    centro = (lado - 1) / 2
+    datos = bytearray()
+    for y in range(lado):
+        for x in range(lado):
+            distancia = math.hypot(x - centro, y - centro) / centro
+            alfa = max(0.0, 1.0 - distancia) ** 2.0
+            datos += bytes((rojo, verde, azul, int(alfa * 255)))
+    textura.blit_buffer(bytes(datos), colorfmt="rgba", bufferfmt="ubyte")
+    textura.mag_filter = "linear"
+    textura.min_filter = "linear"
+    return textura
+
+
 class Fondo(Widget):
     """Degradado oscuro con dos brillos suaves que respiran lento."""
 
     pulso = NumericProperty(0)
-    CAPAS = 7
-    ALFA_CAPA = 0.028
+    INTENSIDAD = 0.30
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        textura = Texture.create(size=(1, 2), colorfmt="rgb")
+        degradado = Texture.create(size=(1, 2), colorfmt="rgb")
         abajo = bytes(int(c * 255) for c in FONDO_ABAJO)
         arriba = bytes(int(c * 255) for c in FONDO_ARRIBA)
-        textura.blit_buffer(abajo + arriba, colorfmt="rgb", bufferfmt="ubyte")
-        textura.mag_filter = "linear"
+        degradado.blit_buffer(abajo + arriba, colorfmt="rgb", bufferfmt="ubyte")
+        degradado.mag_filter = "linear"
 
         # Cada brillo: (color, centro_x, centro_y, radio) en proporciones de la pantalla.
         self._definiciones = [
-            (ACENTO_2, 0.12, 0.88, 0.80),
-            (ACENTO, 0.98, 0.22, 0.70),
+            (ACENTO_2, 0.10, 0.90, 0.85),
+            (ACENTO, 0.98, 0.20, 0.75),
         ]
         self._brillos = []
         with self.canvas:
             Color(1, 1, 1, 1)
-            self._degradado = Rectangle(texture=textura, pos=self.pos, size=self.size)
-            for definicion in self._definiciones:
-                capas = []
-                for _ in range(self.CAPAS):
-                    tinte = Color(definicion[0][0], definicion[0][1], definicion[0][2], self.ALFA_CAPA)
-                    circulo = Ellipse(pos=(0, 0), size=(1, 1))
-                    capas.append((tinte, circulo))
-                self._brillos.append(capas)
+            self._degradado = Rectangle(texture=degradado, pos=self.pos, size=self.size)
+            for color, _cx, _cy, _radio in self._definiciones:
+                tinte = Color(1, 1, 1, self.INTENSIDAD)
+                luz = Rectangle(texture=textura_brillo(color), pos=(0, 0), size=(1, 1))
+                self._brillos.append((tinte, luz))
         self.bind(pos=self._acomodar, size=self._acomodar, pulso=self._respirar)
         self._acomodar()
 
@@ -116,21 +129,15 @@ class Fondo(Widget):
         self._degradado.pos = self.pos
         self._degradado.size = self.size
         ancho, alto = self.size
-        for definicion, capas in zip(self._definiciones, self._brillos):
-            _color, cx, cy, radio = definicion
-            base = radio * ancho
-            for indice, (_tinte, circulo) in enumerate(capas):
-                r = base * (1 - 0.85 * indice / self.CAPAS)
-                centro_x = self.x + cx * ancho
-                centro_y = self.y + cy * alto
-                circulo.pos = (centro_x - r, centro_y - r)
-                circulo.size = (2 * r, 2 * r)
+        for (_color, cx, cy, radio), (_tinte, luz) in zip(self._definiciones, self._brillos):
+            r = radio * ancho
+            luz.pos = (self.x + cx * ancho - r, self.y + cy * alto - r)
+            luz.size = (2 * r, 2 * r)
 
     def _respirar(self, *_args):
-        factor = 0.75 + 0.5 * self.pulso
-        for capas in self._brillos:
-            for tinte, _circulo in capas:
-                tinte.a = self.ALFA_CAPA * factor
+        factor = 0.7 + 0.6 * self.pulso
+        for tinte, _luz in self._brillos:
+            tinte.a = self.INTENSIDAD * factor
 
 
 class Punto(Widget):
