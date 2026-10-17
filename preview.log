@@ -1,0 +1,78 @@
+TODO OK (lógica)
+[WARNING] [Config      ] Older configuration version detected (0 instead of 27)
+[WARNING] [Config      ] Upgrading configuration in progress.
+[DEBUG  ] [Config      ] Upgrading from 0 to 1
+[INFO   ] [Logger      ] Record log in /home/runner/.kivy/logs/kivy_26-10-17_0.txt
+[INFO   ] [Kivy        ] v2.3.0
+[INFO   ] [Kivy        ] Installed at "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/kivy/__init__.py"
+[INFO   ] [Python      ] v3.11.17 (main, Oct  1 2026, 14:32:31) [GCC 13.3.0]
+[INFO   ] [Python      ] Interpreter at "/opt/hostedtoolcache/Python/3.11.17/x64/bin/python"
+[INFO   ] [Logger      ] Purge log fired. Processing...
+[INFO   ] [Logger      ] Purge finished!
+[INFO   ] [Factory     ] 195 symbols loaded
+[INFO   ] [Image       ] Providers: img_tex, img_dds, img_sdl2 (img_pil, img_ffpyplayer ignored)
+[INFO   ] [Window      ] Provider: sdl2
+[INFO   ] [GL          ] Using the "OpenGL" graphics system
+[INFO   ] [GL          ] Backend used <sdl2>
+[INFO   ] [GL          ] OpenGL version <b'4.5 (Compatibility Profile) Mesa 25.2.8-0ubuntu0.24.04.4'>
+[INFO   ] [GL          ] OpenGL vendor <b'Mesa'>
+[INFO   ] [GL          ] OpenGL renderer <b'llvmpipe (LLVM 20.1.2, 256 bits)'>
+[INFO   ] [GL          ] OpenGL parsed version: 4, 5
+[INFO   ] [GL          ] Shading version <b'4.50'>
+[INFO   ] [GL          ] Texture max size <16384>
+[INFO   ] [GL          ] Texture max units <32>
+[INFO   ] [Window      ] auto add sdl2 input provider
+[INFO   ] [Window      ] virtual keyboard not allowed, single mode, not docked
+[INFO   ] [Text        ] Provider: sdl2
+[INFO   ] [GL          ] NPOT texture support is available
+[INFO   ] [Clipboard   ] Provider: sdl2(['clipboard_xclip', 'clipboard_xsel', 'clipboard_dbusklipper', 'clipboard_gtk3'] ignored)
+[CRITICAL] [Cutbuffer   ] Unable to find any valuable Cutbuffer provider. Please enable debug logging (e.g. add -d if running from the command line, or change the log level in the config) and re-run your app to identify potential causes
+xclip - FileNotFoundError: [Errno 2] No such file or directory: 'xclip'
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/kivy/core/__init__.py", line 59, in core_select_lib
+    mod = importlib.__import__(name='{2}.{0}.{1}'.format(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1283, in __import__
+  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/kivy/core/clipboard/clipboard_xclip.py", line 17, in <module>
+    p = subprocess.Popen(['xclip', '-version'], stdout=subprocess.PIPE,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+
+xsel - FileNotFoundError: [Errno 2] No such file or directory: 'xsel'
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/kivy/core/__init__.py", line 59, in core_select_lib
+    mod = importlib.__import__(name='{2}.{0}.{1}'.format(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1283, in __import__
+  File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/kivy/core/clipboard/clipboard_xsel.py", line 16, in <module>
+    p = subprocess.Popen(['xsel'], stdout=subprocess.PIPE)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+
+TextInput.keyboard_suggestions: True
+TextInput.input_type: True
+TextInput.hint_text_color: True
+softinput_mode: resize
+suggestions en la entrada: True
+input_type en la entrada: text
+captura: /tmp/preview_out/1_chat.png
+captura: /tmp/preview_out/2_con_teclado.png
+entrada y (ventana pequeña): 8.0 alto ventana: 470
+captura: /tmp/preview_out/3_sin_cerebro.png
+PREVIEW OK
