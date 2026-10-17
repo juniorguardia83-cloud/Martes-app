@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,14 +21,32 @@ jobs:
       - name: Build debug APK
         run: |
           sudo chown -R 1000:1000 "$GITHUB_WORKSPACE"
+          set +e
           docker run --rm \
             --volume "$GITHUB_WORKSPACE":/home/user/hostcwd \
-            kivy/buildozer -v android debug
+            kivy/buildozer -v android debug 2>&1 | tee /tmp/build.log
+          status=${PIPESTATUS[0]}
           sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
-          ls -la bin
+          ls -la bin || true
+          exit $status
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: martes-apk
           path: bin/*.apk
+
+      # Si algo falla, deja el final del log en la rama build-log
+      # para poder leer el error sin abrir GitHub Actions.
+      - name: Save log tail
+        if: always()
+        run: |
+          tail -n 300 /tmp/build.log > /tmp/log_tail.txt || echo "sin log" > /tmp/log_tail.txt
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout --orphan build-log
+          git rm -rf . -q
+          cp /tmp/log_tail.txt build-log.txt
+          git add build-log.txt
+          git commit -q -m "log de compilacion"
+          git push -f origin build-log
