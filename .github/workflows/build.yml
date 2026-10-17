@@ -8,21 +8,24 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Esta acción corre Buildozer dentro de un contenedor ya preparado,
-      # así no hay que instalar el SDK, el NDK ni las librerías a mano.
+      # Imagen oficial de Buildozer: ya trae Java, Python y las librerías
+      # nativas. El SDK/NDK de Android los descarga Buildozer solo.
       - name: Build debug APK
-        id: buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        with:
-          command: buildozer android debug
-          buildozer_version: stable
+        run: |
+          sudo chown -R 1000:1000 "$GITHUB_WORKSPACE"
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE":/home/user/hostcwd \
+            kivy/buildozer -v android debug
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+          ls -la bin
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: martes-apk
-          path: ${{ steps.buildozer.outputs.filename }}
+          path: bin/*.apk
