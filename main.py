@@ -1,294 +1,222 @@
-import json
-import os
-import re
-import time
+import math
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 
-import traceback
-
-try:
-    import requests
-
-    RequestError = requests.RequestException
-    REQUESTS_ERROR = None
-except Exception:
-    requests = None
-    RequestError = Exception
-    REQUESTS_ERROR = traceback.format_exc()
-
+from kivy.animation import Animation
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.core.window import Window
+from kivy.graphics import Color, Ellipse, Rectangle, RoundedRectangle
+from kivy.graphics.texture import Texture
+from kivy.metrics import dp, sp
+from kivy.properties import ListProperty, NumericProperty
+from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
+from kivy.uix.widget import Widget
+
+import androide
+import cerebro
+
+# Cuando sale el teclado, la ventana se encoge: el chat y la barra de escribir
+# quedan siempre visibles encima del teclado.
+Window.softinput_mode = "resize"
+
+FONDO_ARRIBA = (0.07, 0.08, 0.20)
+FONDO_ABAJO = (0.02, 0.02, 0.07)
+ACENTO = (0.33, 0.80, 1.0, 1)
+ACENTO_2 = (0.62, 0.42, 1.0, 1)
+TEXTO = (0.93, 0.95, 1.0, 1)
+TEXTO_SUAVE = (0.62, 0.67, 0.82, 1)
+TEXTO_SOBRE_ACENTO = (0.02, 0.05, 0.15, 1)
+BURBUJA_MARTES = (0.11, 0.13, 0.27, 0.94)
+BURBUJA_USUARIO = (0.27, 0.34, 0.86, 0.96)
+BARRA = (0.10, 0.12, 0.24, 0.96)
+VELO = (1, 1, 1, 0.10)
+VERDE = (0.30, 0.90, 0.60, 1)
+AMBAR = (1.0, 0.75, 0.30, 1)
+ROJO = (1.0, 0.40, 0.45, 1)
+
+MAX_TEXTO_BURBUJA = 4000
 
 
-# Ollama corriendo en el mismo teléfono (Termux) escucha en 127.0.0.1.
-# Si Ollama está en otro equipo, escribe en la app: url http://IP:11434
-DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
-MODEL_NAME = "martes"
-
-WIKI_API = "https://es.wikipedia.org/w/api.php"
-WIKI_RESUMEN = "https://es.wikipedia.org/api/rest_v1/page/summary/"
-WIKI_HEADERS = {"User-Agent": "MartesApp/0.2 (asistente personal)"}
-
-PERSONALIDAD = (
-    "Eres Martes, el asistente virtual personal de tu dueño. "
-    "Hablas en español, con cercanía y un toque de humor, sin ser pesado. "
-    "Respondes corto y claro. Si no sabes algo, lo dices en vez de inventar. "
-    "Tomas la iniciativa: si ves una mejor opción, la propones. "
-    "Usa lo que sabes del usuario cuando ayude, sin repetirlo todo el tiempo."
-)
-
-MAX_MENSAJES_GUARDADOS = 500
-MENSAJES_EN_CONTEXTO = 12
-TURNOS_EN_CONTEXTO = 6
-
-PREFIJOS_FACTUALES = (
-    "que es", "qué es", "quien es", "quién es", "quien fue", "quién fue",
-    "que fue", "qué fue", "que son", "qué son", "cual es", "cuál es",
-    "cuando", "cuándo", "donde queda", "dónde queda", "donde esta",
-    "dónde está", "cuantos", "cuántos", "cuantas", "cuántas", "busca",
-)
-
-
-try:
-    from jnius import autoclass
-    from android.permissions import request_permissions, Permission
-
-    PythonActivity = autoclass("org.kivy.android.PythonActivity")
-    PackageManager = autoclass("android.content.pm.PackageManager")
-    ANDROID_AVAILABLE = True
-except Exception:
-    ANDROID_AVAILABLE = False
-
-
-# ---------------------------------------------------------------------------
-# Memoria
-# ---------------------------------------------------------------------------
-
-class Memoria:
-    """Guarda automáticamente todo lo que dice el usuario en un archivo JSON."""
-
-    def __init__(self, carpeta):
-        os.makedirs(carpeta, exist_ok=True)
-        self.ruta = os.path.join(carpeta, "memoria_martes.json")
-        self.datos = {"url": DEFAULT_OLLAMA_URL, "mensajes": [], "turnos": []}
-        self.cargar()
-
-    def cargar(self):
+def poner_si_existe(widget, **propiedades):
+    """Asigna propiedades opcionales sin romper si esta versión de Kivy no las tiene."""
+    for nombre, valor in propiedades.items():
         try:
-            with open(self.ruta, "r", encoding="utf-8") as archivo:
-                guardado = json.load(archivo)
-            if isinstance(guardado, dict):
-                self.datos.update(guardado)
-        except (OSError, ValueError):
+            setattr(widget, nombre, valor)
+        except Exception:
             pass
 
-    def guardar(self):
-        try:
-            with open(self.ruta, "w", encoding="utf-8") as archivo:
-                json.dump(self.datos, archivo, ensure_ascii=False)
-        except OSError:
-            pass
 
-    @property
-    def url(self):
-        return self.datos.get("url") or DEFAULT_OLLAMA_URL
-
-    @url.setter
-    def url(self, valor):
-        self.datos["url"] = valor
-        self.guardar()
-
-    def recordar_usuario(self, texto):
-        self.datos["mensajes"].append({"t": int(time.time()), "texto": texto})
-        self.datos["mensajes"] = self.datos["mensajes"][-MAX_MENSAJES_GUARDADOS:]
-        self.guardar()
-
-    def registrar_turno(self, rol, texto):
-        self.datos["turnos"].append({"rol": rol, "texto": texto})
-        self.datos["turnos"] = self.datos["turnos"][-(TURNOS_EN_CONTEXTO * 2):]
-        self.guardar()
-
-    def contexto_usuario(self):
-        recientes = self.datos["mensajes"][-MENSAJES_EN_CONTEXTO:]
-        return [m["texto"] for m in recientes]
-
-    def olvidar_todo(self):
-        url = self.url
-        self.datos = {"url": url, "mensajes": [], "turnos": []}
-        self.guardar()
-
-
-# ---------------------------------------------------------------------------
-# Wikipedia
-# ---------------------------------------------------------------------------
-
-def es_consulta_factual(texto):
-    t = texto.lower().strip().lstrip("¿")
-    return t.startswith(PREFIJOS_FACTUALES)
-
-
-def limpiar_consulta(texto):
-    t = texto.strip().lstrip("¿").rstrip("?!. ")
-    patron = (
-        r"^(busca(me)?( en wikipedia)?|que es|qué es|que son|qué son|quien es|"
-        r"quién es|quien fue|quién fue|que fue|qué fue|cual es|cuál es|"
-        r"cuando|cuándo|donde queda|dónde queda|donde esta|dónde está|"
-        r"cuantos|cuántos|cuantas|cuántas)\s+"
+def fondo_redondeado(widget, color, radio):
+    with widget.canvas.before:
+        tinte = Color(*color)
+        rectangulo = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[radio])
+    widget.bind(
+        pos=lambda _w, valor: setattr(rectangulo, "pos", valor),
+        size=lambda _w, valor: setattr(rectangulo, "size", valor),
     )
-    t = re.sub(patron, "", t, flags=re.IGNORECASE)
-    t = re.sub(r"^(el|la|los|las|un|una|de|del)\s+", "", t, flags=re.IGNORECASE)
-    return t.strip()
+    return tinte
 
 
-def buscar_wikipedia(consulta):
-    """Devuelve (titulo, resumen) o None si no encuentra nada."""
-    if not consulta or requests is None:
-        return None
-    try:
-        busqueda = requests.get(
-            WIKI_API,
-            params={
-                "action": "opensearch",
-                "search": consulta,
-                "limit": 1,
-                "namespace": 0,
-                "format": "json",
-            },
-            headers=WIKI_HEADERS,
-            timeout=10,
-        )
-        busqueda.raise_for_status()
-        titulos = busqueda.json()[1]
-        if not titulos:
-            return None
-        titulo = titulos[0]
-        resumen = requests.get(
-            WIKI_RESUMEN + requests.utils.quote(titulo.replace(" ", "_"), safe=""),
-            headers=WIKI_HEADERS,
-            timeout=10,
-        )
-        resumen.raise_for_status()
-        extracto = resumen.json().get("extract", "").strip()
-        if not extracto:
-            return None
-        return titulo, extracto
-    except (RequestError, ValueError, IndexError):
-        return None
+def ajustar_texto(etiqueta):
+    etiqueta.bind(size=lambda w, tam: setattr(w, "text_size", tam))
 
 
 # ---------------------------------------------------------------------------
-# Martes (modelo)
+# Widgets propios
 # ---------------------------------------------------------------------------
 
-def construir_mensajes(memoria, texto, wiki=None):
-    sistema = PERSONALIDAD
-    recuerdos = memoria.contexto_usuario()
-    if recuerdos:
-        lista = "\n".join(f"- {r}" for r in recuerdos)
-        sistema += "\n\nCosas que el usuario te dijo antes:\n" + lista
-    if wiki:
-        titulo, extracto = wiki
-        sistema += (
-            f"\n\nInformación de Wikipedia sobre «{titulo}»:\n{extracto}\n"
-            "Responde usando esa información, con tus palabras y breve."
+class Fondo(Widget):
+    """Degradado oscuro con dos brillos suaves que respiran lento."""
+
+    pulso = NumericProperty(0)
+    CAPAS = 7
+    ALFA_CAPA = 0.028
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        textura = Texture.create(size=(1, 2), colorfmt="rgb")
+        abajo = bytes(int(c * 255) for c in FONDO_ABAJO)
+        arriba = bytes(int(c * 255) for c in FONDO_ARRIBA)
+        textura.blit_buffer(abajo + arriba, colorfmt="rgb", bufferfmt="ubyte")
+        textura.mag_filter = "linear"
+
+        # Cada brillo: (color, centro_x, centro_y, radio) en proporciones de la pantalla.
+        self._definiciones = [
+            (ACENTO_2, 0.12, 0.88, 0.80),
+            (ACENTO, 0.98, 0.22, 0.70),
+        ]
+        self._brillos = []
+        with self.canvas:
+            Color(1, 1, 1, 1)
+            self._degradado = Rectangle(texture=textura, pos=self.pos, size=self.size)
+            for definicion in self._definiciones:
+                capas = []
+                for _ in range(self.CAPAS):
+                    tinte = Color(definicion[0][0], definicion[0][1], definicion[0][2], self.ALFA_CAPA)
+                    circulo = Ellipse(pos=(0, 0), size=(1, 1))
+                    capas.append((tinte, circulo))
+                self._brillos.append(capas)
+        self.bind(pos=self._acomodar, size=self._acomodar, pulso=self._respirar)
+        self._acomodar()
+
+        ciclo = Animation(pulso=1, duration=6, t="in_out_sine") + Animation(
+            pulso=0, duration=6, t="in_out_sine"
         )
+        ciclo.repeat = True
+        ciclo.start(self)
 
-    mensajes = [{"role": "system", "content": sistema}]
-    for turno in memoria.datos["turnos"]:
-        mensajes.append({"role": turno["rol"], "content": turno["texto"]})
-    mensajes.append({"role": "user", "content": texto})
-    return mensajes
+    def _acomodar(self, *_args):
+        self._degradado.pos = self.pos
+        self._degradado.size = self.size
+        ancho, alto = self.size
+        for definicion, capas in zip(self._definiciones, self._brillos):
+            _color, cx, cy, radio = definicion
+            base = radio * ancho
+            for indice, (_tinte, circulo) in enumerate(capas):
+                r = base * (1 - 0.85 * indice / self.CAPAS)
+                centro_x = self.x + cx * ancho
+                centro_y = self.y + cy * alto
+                circulo.pos = (centro_x - r, centro_y - r)
+                circulo.size = (2 * r, 2 * r)
+
+    def _respirar(self, *_args):
+        factor = 0.75 + 0.5 * self.pulso
+        for capas in self._brillos:
+            for tinte, _circulo in capas:
+                tinte.a = self.ALFA_CAPA * factor
 
 
-def consultar_ollama(memoria, texto, wiki=None):
-    url = f"{memoria.url.rstrip('/')}/api/chat"
-    payload = {
-        "model": MODEL_NAME,
-        "messages": construir_mensajes(memoria, texto, wiki),
-        "stream": False,
-    }
-    respuesta = requests.post(url, json=payload, timeout=120)
-    respuesta.raise_for_status()
-    contenido = respuesta.json().get("message", {}).get("content", "").strip()
-    return contenido or "No tengo respuesta para eso."
+class Punto(Widget):
+    """Puntito de color que indica el estado."""
+
+    color = ListProperty(AMBAR)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas:
+            self._tinte = Color(*self.color)
+            self._circulo = Ellipse(pos=self.pos, size=self.size)
+        self.bind(pos=self._acomodar, size=self._acomodar, color=self._pintar)
+
+    def _acomodar(self, *_args):
+        self._circulo.pos = self.pos
+        self._circulo.size = self.size
+
+    def _pintar(self, _widget, valor):
+        self._tinte.rgba = valor
 
 
-def preguntar_a_martes(memoria, texto):
-    if requests is None:
-        return (
-            "No pude cargar el módulo de internet (requests). Detalle:\n"
-            + (REQUESTS_ERROR or "")[-600:]
+class BotonRedondo(Button):
+    def __init__(self, color_fondo=ACENTO, **kwargs):
+        super().__init__(
+            background_normal="",
+            background_down="",
+            background_color=(0, 0, 0, 0),
+            **kwargs,
         )
+        self._fondo = fondo_redondeado(self, color_fondo, dp(22))
+        self._color_fondo = color_fondo
+        self.bind(state=self._presionado)
 
-    wiki = None
-    if es_consulta_factual(texto):
-        wiki = buscar_wikipedia(limpiar_consulta(texto))
-
-    try:
-        respuesta = consultar_ollama(memoria, texto, wiki)
-    except RequestError:
-        if wiki:
-            titulo, extracto = wiki
-            respuesta = f"{extracto}\n(Wikipedia: {titulo})"
-        else:
-            return (
-                "No pude hablar con mi cerebro (Ollama). Revisa que esté "
-                f"encendido en {memoria.url}. Puedes cambiar la dirección "
-                "escribiendo: url http://127.0.0.1:11434"
-            )
-
-    memoria.registrar_turno("user", texto)
-    memoria.registrar_turno("assistant", respuesta)
-    return respuesta
+    def _presionado(self, _widget, estado):
+        c = self._color_fondo
+        self._fondo.rgba = (c[0], c[1], c[2], c[3] * 0.65) if estado == "down" else c
 
 
-# ---------------------------------------------------------------------------
-# Apps de Android
-# ---------------------------------------------------------------------------
+def crear_burbuja(texto, es_usuario):
+    """Fila con una burbuja de chat del tamaño justo del texto."""
+    texto = texto[:MAX_TEXTO_BURBUJA]
+    margen_x, margen_y = dp(14), dp(10)
+    limite = Window.width * 0.80 - 2 * margen_x
 
-def obtener_apps_instaladas():
-    """Devuelve {nombre_visible: paquete} cuando se ejecuta en Android."""
-    if not ANDROID_AVAILABLE:
-        return {}
+    etiqueta = Label(
+        text=texto,
+        color=TEXTO,
+        font_size=sp(16),
+        halign="left",
+        valign="top",
+        size_hint=(None, None),
+    )
+    etiqueta.text_size = (None, None)
+    etiqueta.texture_update()
+    ancho = etiqueta.texture_size[0]
+    if ancho > limite:
+        etiqueta.text_size = (limite, None)
+        etiqueta.texture_update()
+        ancho = limite
+    else:
+        ancho = math.ceil(ancho) + 2
+    alto = etiqueta.texture_size[1]
+    etiqueta.size = (ancho, alto)
+    etiqueta.text_size = (ancho, alto)
 
-    try:
-        context = PythonActivity.mActivity
-        package_manager = context.getPackageManager()
-        aplicaciones = package_manager.getInstalledApplications(
-            PackageManager.GET_META_DATA
-        )
-        resultado = {}
-        for aplicacion in aplicaciones.toArray():
-            nombre = str(package_manager.getApplicationLabel(aplicacion))
-            resultado[nombre.lower()] = str(aplicacion.packageName)
-        return resultado
-    except Exception:
-        return {}
+    burbuja = BoxLayout(
+        size_hint=(None, None),
+        padding=(margen_x, margen_y),
+        size=(ancho + 2 * margen_x, alto + 2 * margen_y),
+    )
+    burbuja.add_widget(etiqueta)
+    fondo_redondeado(burbuja, BURBUJA_USUARIO if es_usuario else BURBUJA_MARTES, dp(18))
 
-
-def abrir_app(nombre_app, apps_dict):
-    if not ANDROID_AVAILABLE:
-        return "Martes: Abrir apps solo funciona dentro del teléfono."
-    for nombre, paquete in apps_dict.items():
-        if nombre_app.lower() in nombre:
-            try:
-                context = PythonActivity.mActivity
-                intent = context.getPackageManager().getLaunchIntentForPackage(paquete)
-                if intent:
-                    context.startActivity(intent)
-                    return f"Martes: Abriendo {nombre}..."
-            except Exception as error:
-                return f"Martes: No pude abrir {nombre}: {error}"
-    return f"Martes: No encontré una app llamada {nombre_app}."
+    fila = AnchorLayout(
+        anchor_x="right" if es_usuario else "left",
+        size_hint_y=None,
+        height=burbuja.height + dp(4),
+        padding=(dp(10), 0),
+    )
+    fila.add_widget(burbuja)
+    return fila
 
 
 # ---------------------------------------------------------------------------
-# Interfaz
+# Aplicación
 # ---------------------------------------------------------------------------
 
 class MartesApp(App):
@@ -319,72 +247,167 @@ class MartesApp(App):
         return caja
 
     def _construir_interfaz(self):
-        self.memoria = Memoria(self.user_data_dir)
-        self.apps_dict = obtener_apps_instaladas()
+        self.memoria = cerebro.Memoria(self.user_data_dir)
+        self.apps_dict = androide.obtener_apps_instaladas()
 
-        root = BoxLayout(orientation="vertical", padding=12, spacing=8)
+        raiz = FloatLayout()
+        raiz.add_widget(Fondo())
+        contenido = BoxLayout(orientation="vertical", spacing=dp(4))
+        raiz.add_widget(contenido)
 
-        header = BoxLayout(size_hint_y=None, height=48, spacing=8)
-        header.add_widget(Label(text="Martes", font_size=22, bold=True))
-        self.estado = Label(text="Listo", halign="right")
-        header.add_widget(self.estado)
-        root.add_widget(header)
-
-        self.historial = Label(
-            text=(
-                "Martes está listo.\n"
-                "Escríbeme algo, pregunta cosas ('qué es un volcán'), "
-                "o di 'abre cámara'.\n"
-                + (
-                    f"\n[Aviso] Falló el módulo de internet:\n{REQUESTS_ERROR[-500:]}\n"
-                    if REQUESTS_ERROR
-                    else ""
-                )
-            ),
-            size_hint_y=None,
+        # --- Cabecera ---
+        cabecera = BoxLayout(
+            size_hint_y=None, height=dp(56), padding=(dp(16), dp(8)), spacing=dp(8)
+        )
+        titulo = Label(
+            text="MARTES",
+            bold=True,
+            color=ACENTO,
+            font_size=sp(20),
             halign="left",
-            valign="top",
+            valign="middle",
+            size_hint_x=None,
+            width=dp(96),
         )
-        self.historial.bind(
-            width=lambda _w, ancho: setattr(self.historial, "text_size", (ancho, None)),
-            texture_size=lambda _w, tam: setattr(self.historial, "height", tam[1]),
-        )
-        self.scroll = ScrollView()
-        self.scroll.add_widget(self.historial)
-        root.add_widget(self.scroll)
+        ajustar_texto(titulo)
+        cabecera.add_widget(titulo)
 
+        caja_punto = AnchorLayout(size_hint_x=None, width=dp(12))
+        self.punto = Punto(size_hint=(None, None), size=(dp(9), dp(9)))
+        caja_punto.add_widget(self.punto)
+        cabecera.add_widget(caja_punto)
+
+        self.estado = Label(
+            text="Conectando...",
+            color=TEXTO_SUAVE,
+            font_size=sp(13),
+            halign="left",
+            valign="middle",
+        )
+        ajustar_texto(self.estado)
+        cabecera.add_widget(self.estado)
+
+        caja_limpiar = AnchorLayout(size_hint_x=None, width=dp(84))
+        limpiar = BotonRedondo(
+            text="Limpiar",
+            color_fondo=VELO,
+            color=TEXTO,
+            font_size=sp(13),
+            size_hint=(None, None),
+            size=(dp(80), dp(34)),
+        )
+        limpiar.bind(on_release=self.limpiar)
+        caja_limpiar.add_widget(limpiar)
+        cabecera.add_widget(caja_limpiar)
+        contenido.add_widget(cabecera)
+
+        # --- Chat ---
+        self.scroll = ScrollView(
+            do_scroll_x=False,
+            bar_width=dp(3),
+            bar_color=(1, 1, 1, 0.25),
+            bar_inactive_color=(1, 1, 1, 0.08),
+        )
+        self.lista = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=dp(4),
+            padding=(0, dp(8)),
+        )
+        self.lista.bind(minimum_height=self.lista.setter("height"))
+        self.scroll.add_widget(self.lista)
+        contenido.add_widget(self.scroll)
+
+        # --- Barra para escribir ---
+        barra = BoxLayout(
+            size_hint_y=None, height=dp(62), padding=(dp(10), dp(8)), spacing=dp(8)
+        )
+        campo = BoxLayout(padding=(dp(6), 0))
+        fondo_redondeado(campo, BARRA, dp(22))
         self.entrada = TextInput(
             hint_text="Escríbele a Martes...",
             multiline=False,
-            size_hint_y=None,
-            height=52,
+            background_color=(0, 0, 0, 0),
+            foreground_color=TEXTO,
+            font_size=sp(16),
+            padding=(dp(12), dp(11), dp(12), dp(6)),
+        )
+        # Autocorrector y sugerencias del teclado activados.
+        poner_si_existe(
+            self.entrada,
+            background_normal="",
+            background_active="",
+            hint_text_color=TEXTO_SUAVE,
+            cursor_color=ACENTO,
+            input_type="text",
+            keyboard_suggestions=True,
+            write_tab=False,
         )
         self.entrada.bind(on_text_validate=self.enviar)
-        root.add_widget(self.entrada)
+        campo.add_widget(self.entrada)
+        barra.add_widget(campo)
 
-        controles = BoxLayout(size_hint_y=None, height=52, spacing=8)
-        boton = Button(text="Enviar")
+        boton = BotonRedondo(
+            text="Enviar",
+            bold=True,
+            color=TEXTO_SOBRE_ACENTO,
+            font_size=sp(15),
+            size_hint=(None, 1),
+            width=dp(84),
+        )
         boton.bind(on_release=self.enviar)
-        controles.add_widget(boton)
-        limpiar = Button(text="Limpiar")
-        limpiar.bind(on_release=self.limpiar)
-        controles.add_widget(limpiar)
-        root.add_widget(controles)
+        barra.add_widget(boton)
+        contenido.add_widget(barra)
 
-        return root
+        self._mostrar_inicio()
+        return raiz
+
+    def _mostrar_inicio(self):
+        turnos = self.memoria.datos.get("turnos", [])
+        if turnos:
+            for turno in turnos:
+                self.agregar_mensaje(turno["texto"], turno["rol"] == "user")
+        else:
+            self.agregar_mensaje(
+                "Hola, soy Martes. Escríbeme lo que necesites, pregúntame cosas "
+                "(\"qué es un volcán\") o dime \"abre cámara\".",
+                False,
+            )
+
+    # --- Estado ---
+    def _poner_estado(self, texto, color):
+        self.estado.text = texto
+        self.punto.color = color
+
+    def _poner_estado_cerebro(self, conectado):
+        if conectado:
+            self._poner_estado("Cerebro conectado", VERDE)
+        else:
+            self._poner_estado("Sin cerebro", ROJO)
+            self.agregar_mensaje(
+                "Todavía no tengo cerebro conectado. Abre Termux y escribe "
+                "\"ollama serve\", o dime dónde está con: url http://IP:11434",
+                False,
+            )
 
     def on_start(self):
-        if ANDROID_AVAILABLE:
-            try:
-                request_permissions([Permission.INTERNET])
-            except Exception:
-                pass
+        androide.pedir_permisos()
+        futuro = self.executor.submit(cerebro.cerebro_disponible, self.memoria)
+        futuro.add_done_callback(self._cerebro_revisado)
 
+    def _cerebro_revisado(self, futuro):
+        try:
+            conectado = futuro.result()
+        except Exception:
+            conectado = False
+        Clock.schedule_once(lambda _dt: self._poner_estado_cerebro(conectado))
+
+    # --- Chat ---
     def enviar(self, *_args):
         try:
             self._enviar_interno()
         except Exception:
-            self.agregar_mensaje("Martes: Algo falló:\n" + traceback.format_exc()[-700:])
+            self.agregar_mensaje("Algo falló:\n" + traceback.format_exc()[-700:], False)
 
     def _enviar_interno(self):
         texto = self.entrada.text.strip()
@@ -392,30 +415,34 @@ class MartesApp(App):
             return
 
         self.entrada.text = ""
-        self.agregar_mensaje(f"Tú: {texto}")
+        Clock.schedule_once(lambda _dt: setattr(self.entrada, "focus", True), 0.15)
+        self.agregar_mensaje(texto, True)
         minuscula = texto.lower()
 
         # Comandos locales (no se guardan como recuerdos).
         if minuscula.startswith(("abre ", "abrir ")):
             nombre = texto.split(" ", 1)[1].strip()
-            self.agregar_mensaje(abrir_app(nombre, self.apps_dict))
+            self.agregar_mensaje(androide.abrir_app(nombre, self.apps_dict), False)
             return
 
         if minuscula.startswith("url "):
             nueva = texto.split(" ", 1)[1].strip()
             self.memoria.url = nueva
-            self.agregar_mensaje(f"Martes: Listo, ahora uso {nueva}")
+            self.agregar_mensaje(f"Listo, ahora uso {nueva}", False)
+            self._poner_estado("Conectando...", AMBAR)
+            futuro = self.executor.submit(cerebro.cerebro_disponible, self.memoria)
+            futuro.add_done_callback(self._cerebro_revisado)
             return
 
         if minuscula in ("olvida todo", "borra tu memoria"):
             self.memoria.olvidar_todo()
-            self.agregar_mensaje("Martes: Memoria borrada.")
+            self.agregar_mensaje("Memoria borrada.", False)
             return
 
         # Todo lo demás se recuerda automáticamente.
         self.memoria.recordar_usuario(texto)
-        self.estado.text = "Pensando..."
-        futuro = self.executor.submit(preguntar_a_martes, self.memoria, texto)
+        self._poner_estado("Pensando...", AMBAR)
+        futuro = self.executor.submit(cerebro.preguntar_a_martes, self.memoria, texto)
         futuro.add_done_callback(self._respuesta_recibida)
 
     def _respuesta_recibida(self, futuro):
@@ -426,15 +453,15 @@ class MartesApp(App):
         Clock.schedule_once(lambda _dt: self._mostrar_respuesta(respuesta))
 
     def _mostrar_respuesta(self, respuesta):
-        self.estado.text = "Listo"
-        self.agregar_mensaje(f"Martes: {respuesta}")
+        self._poner_estado("Listo", VERDE)
+        self.agregar_mensaje(respuesta, False)
 
-    def agregar_mensaje(self, mensaje):
-        self.historial.text += f"\n{mensaje}\n"
+    def agregar_mensaje(self, texto, es_usuario):
+        self.lista.add_widget(crear_burbuja(texto, es_usuario))
         Clock.schedule_once(lambda _dt: setattr(self.scroll, "scroll_y", 0), 0.1)
 
     def limpiar(self, *_args):
-        self.historial.text = "Martes está listo.\n"
+        self.lista.clear_widgets()
 
     def on_stop(self):
         self.executor.shutdown(wait=False)

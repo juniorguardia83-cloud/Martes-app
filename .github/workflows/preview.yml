@@ -1,0 +1,54 @@
+name: Preview UI
+
+on:
+  push:
+    branches-ignore: [preview, build-log]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Kivy y pantalla virtual
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1 libgl1-mesa-dri libegl1 libglu1-mesa libmtdev1
+          python -m pip install "kivy==2.3.0"
+
+      - name: Tests de lógica
+        run: python tests/test_cerebro.py 2>&1 | tee /tmp/preview.log
+
+      - name: Preview de la interfaz
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          PREVIEW_DIR: /tmp/preview_out
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" python tests/preview.py 2>&1 | tee -a /tmp/preview.log
+
+      # Deja capturas y log en la rama "preview" para poder verlos sin abrir Actions.
+      - name: Publicar capturas
+        if: always()
+        run: |
+          mkdir -p /tmp/out
+          cp /tmp/preview.log /tmp/out/ 2>/dev/null || true
+          cp /tmp/preview_out/*.png /tmp/out/ 2>/dev/null || true
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout --orphan preview
+          git rm -rf . -q
+          git clean -fdxq
+          cp /tmp/out/* . 2>/dev/null || echo "sin archivos" > vacio.txt
+          git add .
+          git commit -q -m "preview de la interfaz"
+          git push -f origin preview

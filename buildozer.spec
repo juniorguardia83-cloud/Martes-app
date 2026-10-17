@@ -4,8 +4,9 @@ package.name = martes
 package.domain = com.juniorguardia83
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
-version = 0.2.0
-requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,requests==2.31.0,urllib3==1.26.18,chardet,idna,certifi,pyjnius
+source.exclude_dirs = tests,bin,.github,.git,.buildozer,__pycache__
+version = 0.3.0
+requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,pyjnius
 orientation = portrait
 fullscreen = 0
 
