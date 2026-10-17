@@ -7,39 +7,22 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git zip unzip autoconf automake autoconf-archive \
-            libtool libtool-bin libltdl-dev m4 pkg-config zlib1g-dev \
-            libncurses-dev libtinfo-dev cmake libffi-dev libssl-dev
-          echo "ACLOCAL_PATH=/usr/share/aclocal" >> "$GITHUB_ENV"
-          python -m pip install --upgrade pip
-          python -m pip install "Cython<3" buildozer
-
+      # Esta acción corre Buildozer dentro de un contenedor ya preparado,
+      # así no hay que instalar el SDK, el NDK ni las librerías a mano.
       - name: Build debug APK
-        env:
-          P4A_RELEASE_KEYSTORE: ""
-        run: buildozer -v android debug
+        id: buildozer
+        uses: ArtemSBulgakov/buildozer-action@v1
+        with:
+          command: buildozer android debug
+          buildozer_version: stable
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: martes-apk
-          path: bin/*.apk
+          path: ${{ steps.buildozer.outputs.filename }}
