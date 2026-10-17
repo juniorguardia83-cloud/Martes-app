@@ -4,7 +4,18 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import requests
+import traceback
+
+try:
+    import requests
+
+    RequestError = requests.RequestException
+    REQUESTS_ERROR = None
+except Exception:
+    requests = None
+    RequestError = Exception
+    REQUESTS_ERROR = traceback.format_exc()
+
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
@@ -50,7 +61,7 @@ try:
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
     PackageManager = autoclass("android.content.pm.PackageManager")
     ANDROID_AVAILABLE = True
-except ImportError:
+except Exception:
     ANDROID_AVAILABLE = False
 
 
@@ -136,7 +147,7 @@ def limpiar_consulta(texto):
 
 def buscar_wikipedia(consulta):
     """Devuelve (titulo, resumen) o None si no encuentra nada."""
-    if not consulta:
+    if not consulta or requests is None:
         return None
     try:
         busqueda = requests.get(
@@ -166,7 +177,7 @@ def buscar_wikipedia(consulta):
         if not extracto:
             return None
         return titulo, extracto
-    except (requests.RequestException, ValueError, IndexError):
+    except (RequestError, ValueError, IndexError):
         return None
 
 
@@ -208,13 +219,19 @@ def consultar_ollama(memoria, texto, wiki=None):
 
 
 def preguntar_a_martes(memoria, texto):
+    if requests is None:
+        return (
+            "No pude cargar el módulo de internet (requests). Detalle:\n"
+            + (REQUESTS_ERROR or "")[-600:]
+        )
+
     wiki = None
     if es_consulta_factual(texto):
         wiki = buscar_wikipedia(limpiar_consulta(texto))
 
     try:
         respuesta = consultar_ollama(memoria, texto, wiki)
-    except requests.RequestException:
+    except RequestError:
         if wiki:
             titulo, extracto = wiki
             respuesta = f"{extracto}\n(Wikipedia: {titulo})"
@@ -283,6 +300,25 @@ class MartesApp(App):
 
     def build(self):
         self.title = "Martes"
+        try:
+            return self._construir_interfaz()
+        except Exception:
+            return self._pantalla_error(traceback.format_exc())
+
+    def _pantalla_error(self, detalle):
+        """Muestra el error en pantalla en vez de cerrar la app."""
+        caja = BoxLayout(orientation="vertical", padding=12, spacing=8)
+        caja.add_widget(
+            Label(
+                text="Martes tuvo un error al iniciar.\nToma captura de esta pantalla.",
+                size_hint_y=None,
+                height=80,
+            )
+        )
+        caja.add_widget(TextInput(text=detalle, readonly=True))
+        return caja
+
+    def _construir_interfaz(self):
         self.memoria = Memoria(self.user_data_dir)
         self.apps_dict = obtener_apps_instaladas()
 
@@ -299,6 +335,11 @@ class MartesApp(App):
                 "Martes está listo.\n"
                 "Escríbeme algo, pregunta cosas ('qué es un volcán'), "
                 "o di 'abre cámara'.\n"
+                + (
+                    f"\n[Aviso] Falló el módulo de internet:\n{REQUESTS_ERROR[-500:]}\n"
+                    if REQUESTS_ERROR
+                    else ""
+                )
             ),
             size_hint_y=None,
             halign="left",
@@ -340,6 +381,12 @@ class MartesApp(App):
                 pass
 
     def enviar(self, *_args):
+        try:
+            self._enviar_interno()
+        except Exception:
+            self.agregar_mensaje("Martes: Algo falló:\n" + traceback.format_exc()[-700:])
+
+    def _enviar_interno(self):
         texto = self.entrada.text.strip()
         if not texto:
             return
