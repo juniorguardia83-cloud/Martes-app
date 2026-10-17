@@ -5,7 +5,7 @@ package.domain = com.juniorguardia83
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 0.2.0
-requirements = python3,kivy==2.3.0,requests,urllib3,idna,charset-normalizer,certifi,pyjnius
+requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,requests==2.31.0,urllib3==1.26.18,chardet,idna,certifi,pyjnius
 orientation = portrait
 fullscreen = 0
 
@@ -22,6 +22,9 @@ android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.allow_backup = True
 android.debug_artifact = apk
+
+# python-for-android estable (usa Python 3.11 y es compatible con Kivy 2.3.0).
+p4a.branch = v2024.01.21
 
 [buildozer]
 log_level = 2
